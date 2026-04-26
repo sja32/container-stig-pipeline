@@ -1,0 +1,13 @@
+FROM nginx:alpine
+
+# Create non-root user
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+# Fix permissions
+RUN chown -R appuser:appgroup /var/cache/nginx /var/run /var/log/nginx
+
+USER appuser
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]
