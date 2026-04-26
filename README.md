@@ -20,6 +20,18 @@ This project demonstrates applying STIG-aligned security principles to container
 - Corrected ownership and permissions
 - Reduced container attack surface
 
+## 🎯 Why This Matters
+
+This project demonstrates the importance of:
+
+- Reducing attack surface in container images
+- Selecting minimal and secure base images
+- Applying least privilege principles
+- Performing automated vulnerability scanning
+
+These practices align with modern cloud security and DevSecOps methodologies.
+
+
 ## Tools Used
 
 - Docker
