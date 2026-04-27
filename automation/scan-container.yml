@@ -1,0 +1,23 @@
+- name: Container STIG Pipeline Scan
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: Scan insecure container
+      command: trivy image nginx-bad
+      register: bad_scan
+
+    - name: Save insecure report
+      copy:
+        content: "{{ bad_scan.stdout }}"
+        dest: ../reports/nginx-bad-automated.txt
+
+    - name: Scan secure container
+      command: trivy image nginx-secure
+      register: secure_scan
+
+    - name: Save secure report
+      copy:
+        content: "{{ secure_scan.stdout }}"
+        dest: ../reports/nginx-secure-automated.txt
