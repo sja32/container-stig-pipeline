@@ -1,6 +1,6 @@
 - name: Container STIG Pipeline Scan
   hosts: all
-  gather_facts: false
+  gather_facts: true
 
   tasks:
     - name: Scan insecure container
@@ -10,7 +10,7 @@
     - name: Save insecure report
       copy:
         content: "{{ bad_scan.stdout }}"
-        dest: ../reports/nginx-bad-automated.txt
+        dest: "/home/allensj/projects/security/container-stig-pipeline/reports/nginx-bad-{{ ansible_date_time.iso8601_basic }}.txt"
 
     - name: Scan secure container
       command: /usr/bin/trivy image nginx-secure
@@ -19,4 +19,4 @@
     - name: Save secure report
       copy:
         content: "{{ secure_scan.stdout }}"
-        dest: ../reports/nginx-secure-automated.txt
+        dest: "/home/allensj/projects/security/container-stig-pipeline/reports/nginx-secure-{{ ansible_date_time.iso8601_basic }}.txt"
