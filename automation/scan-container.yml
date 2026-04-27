@@ -1,6 +1,5 @@
 - name: Container STIG Pipeline Scan
   hosts: all
-  connection: local
   gather_facts: false
 
   tasks:
