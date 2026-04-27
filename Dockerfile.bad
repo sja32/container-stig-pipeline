@@ -1,0 +1,19 @@
+FROM ubuntu:18.04
+
+RUN apt-get update && apt-get install -y \
+    nginx \
+    openssl \
+    curl \
+    sudo \
+    vim \
+    telnet \
+    net-tools \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN useradd admin && echo "admin:admin" | chpasswd
+
+RUN chmod 777 /var/www/html
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]
