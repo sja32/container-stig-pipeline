@@ -1,22 +1,93 @@
-- name: Container STIG Pipeline Scan
+- name: Container STIG Pipeline Scan (with thresholds)
   hosts: all
   gather_facts: true
 
+  vars:
+    reports_dir: /home/allensj/projects/security/container-stig-pipeline/reports
+
   tasks:
-    - name: Scan insecure container
-      command: /usr/bin/trivy image nginx-bad
-      register: bad_scan
+    - name: Ensure reports directory exists
+      file:
+        path: "{{ reports_dir }}"
+        state: directory
+        mode: '0755'
 
-    - name: Save insecure report
+    # -------- BAD IMAGE SCAN (JSON) --------
+    - name: Scan insecure container (JSON)
+      command: /usr/bin/trivy image -f json nginx-bad
+      register: bad_scan_json
+      changed_when: false
+
+    - name: Save insecure report (timestamped)
       copy:
-        content: "{{ bad_scan.stdout }}"
-        dest: "/home/allensj/projects/security/container-stig-pipeline/reports/nginx-bad-{{ ansible_date_time.iso8601_basic }}.txt"
+        content: "{{ bad_scan_json.stdout }}"
+        dest: "{{ reports_dir }}/nginx-bad-{{ ansible_date_time.iso8601_basic }}.json"
 
-    - name: Scan secure container
-      command: /usr/bin/trivy image nginx-secure
-      register: secure_scan
+    # -------- THRESHOLD LOGIC (BAD IMAGE) --------
+    - name: Count CRITICAL vulnerabilities (bad image)
+      set_fact:
+        bad_critical: "{{ (bad_scan_json.stdout | from_json).Results
+                          | map(attribute='Vulnerabilities') | select('defined')
+                          | sum(start=[])
+                          | selectattr('Severity','equalto','CRITICAL') | list | length }}"
 
-    - name: Save secure report
+    - name: Count HIGH vulnerabilities (bad image)
+      set_fact:
+        bad_high: "{{ (bad_scan_json.stdout | from_json).Results
+                      | map(attribute='Vulnerabilities') | select('defined')
+                      | sum(start=[])
+                      | selectattr('Severity','equalto','HIGH') | list | length }}"
+
+    - name: Show vulnerability counts (bad image)
+      debug:
+        msg: "BAD image → CRITICAL={{ bad_critical }}, HIGH={{ bad_high }}"
+
+    - name: Fail if CRITICAL vulnerabilities found (bad image)
+      fail:
+        msg: "CRITICAL vulnerabilities detected in nginx-bad ({{ bad_critical }})"
+      when: bad_critical | int > 0
+
+    - name: Warn if HIGH vulnerabilities found (bad image)
+      debug:
+        msg: "WARNING: HIGH vulnerabilities detected in nginx-bad ({{ bad_high }})"
+      when: bad_high | int > 0
+
+    # -------- SECURE IMAGE SCAN (JSON) --------
+    - name: Scan secure container (JSON)
+      command: /usr/bin/trivy image -f json nginx-secure
+      register: secure_scan_json
+      changed_when: false
+
+    - name: Save secure report (timestamped)
       copy:
-        content: "{{ secure_scan.stdout }}"
-        dest: "/home/allensj/projects/security/container-stig-pipeline/reports/nginx-secure-{{ ansible_date_time.iso8601_basic }}.txt"
+        content: "{{ secure_scan_json.stdout }}"
+        dest: "{{ reports_dir }}/nginx-secure-{{ ansible_date_time.iso8601_basic }}.json"
+
+    # -------- THRESHOLD LOGIC (SECURE IMAGE) --------
+    - name: Count CRITICAL vulnerabilities (secure image)
+      set_fact:
+        secure_critical: "{{ (secure_scan_json.stdout | from_json).Results
+                             | map(attribute='Vulnerabilities') | select('defined')
+                             | sum(start=[])
+                             | selectattr('Severity','equalto','CRITICAL') | list | length }}"
+
+    - name: Count HIGH vulnerabilities (secure image)
+      set_fact:
+        secure_high: "{{ (secure_scan_json.stdout | from_json).Results
+                         | map(attribute='Vulnerabilities') | select('defined')
+                         | sum(start=[])
+                         | selectattr('Severity','equalto','HIGH') | list | length }}"
+
+    - name: Show vulnerability counts (secure image)
+      debug:
+        msg: "SECURE image → CRITICAL={{ secure_critical }}, HIGH={{ secure_high }}"
+
+    - name: Fail if CRITICAL vulnerabilities found (secure image)
+      fail:
+        msg: "CRITICAL vulnerabilities detected in nginx-secure ({{ secure_critical }})"
+      when: secure_critical | int > 0
+
+    - name: Warn if HIGH vulnerabilities found (secure image)
+      debug:
+        msg: "WARNING: HIGH vulnerabilities detected in nginx-secure ({{ secure_high }})"
+      when: secure_high | int > 0
