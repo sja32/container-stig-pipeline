@@ -5,7 +5,7 @@
 
   tasks:
     - name: Scan insecure container
-      command: trivy image nginx-bad
+      command: /usr/local/bintrivy image nginx-bad
       register: bad_scan
 
     - name: Save insecure report
