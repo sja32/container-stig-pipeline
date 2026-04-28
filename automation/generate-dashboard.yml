@@ -50,44 +50,80 @@
           PASSED ✅
           {% endif %}
 
+
     - name: Generate HTML dashboard
-      copy:
-        dest: "{{ dashboard_file }}"
-        content: |
-          <html>
-          <head>
-            <title>Container Security Dashboard</title>
-            <style>
-              body { font-family: Arial; background-color: #111; color: #eee; }
-              .card { border: 1px solid #444; padding: 20px; margin: 20px; border-radius: 10px; }
-              .fail { color: red; }
-              .pass { color: lightgreen; }
-            </style>
-          </head>
-          <body>
+  copy:
+    dest: "{{ dashboard_file }}"
+    content: |
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>Container Security Dashboard</title>
 
-            <h1>🔥 Container Security Dashboard</h1>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #1d1160, #00788c);
+            color: white;
+            padding: 20px;
+          }
 
-            <div class="card">
-              <h2>Baseline Image (nginx-secure)</h2>
-              <p>Medium Vulnerabilities: {{ baseline_medium }}</p>
-            </div>
+          h1 {
+            text-align: center;
+            color: #00ffff;
+          }
 
-            <div class="card">
-              <h2>Production Image (nginx-bad)</h2>
-              <p>Medium Vulnerabilities: {{ production_medium }}</p>
-            </div>
+          .card {
+            background-color: rgba(0,0,0,0.6);
+            border: 2px solid #00ffff;
+            padding: 20px;
+            margin: 20px auto;
+            border-radius: 12px;
+            width: 70%;
+            box-shadow: 0 0 15px #00ffff;
+          }
 
-            <div class="card">
-              <h2>Compliance Status</h2>
-              <h1 class="{{ 'fail' if production_medium > baseline_medium else 'pass' }}">
-                {{ compliance_status }}
-              </h1>
-            </div>
+          .status-pass {
+            color: #00ffcc;
+            font-size: 32px;
+          }
 
-          </body>
-          </html>
+          .status-fail {
+            color: #ff4d4d;
+            font-size: 32px;
+          }
 
-    - name: Show dashboard location
-      debug:
-        msg: "Dashboard created at {{ dashboard_file }}"
+          .label {
+            color: #00ffff;
+            font-weight: bold;
+          }
+        </style>
+      </head>
+
+      <body>
+
+        <h1>🐝 Container Security Dashboard</h1>
+
+        <div class="card">
+          <h2>Baseline Image (nginx-secure)</h2>
+          <p><span class="label">Medium Vulnerabilities:</span> {{ baseline_medium }}</p>
+        </div>
+
+        <div class="card">
+          <h2>Production Image (nginx-bad)</h2>
+          <p><span class="label">Medium Vulnerabilities:</span> {{ production_medium }}</p>
+        </div>
+
+        <div class="card">
+          <h2>Compliance Status</h2>
+
+          {% if production_medium > baseline_medium %}
+          <div class="status-fail">FAILED ❌</div>
+          {% else %}
+          <div class="status-pass">PASSED ✅</div>
+          {% endif %}
+
+        </div>
+
+      </body>
+      </html>
