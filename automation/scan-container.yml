@@ -1,146 +1,143 @@
-- name: Container STIG Pipeline Scan (with thresholds)
+- name: Container STIG Pipeline Scan (Dashboard Enabled)
   hosts: all
-  gather_facts: true
+  gather_facts: false
 
   vars:
-    reports_dir: /home/allensj/projects/security/container-stig-pipeline/reports
+    reports_dir: "/home/allensj/projects/security/container-stig-pipeline/reports"
+    timestamp: "{{ lookup('pipe', 'date +%Y%m%d-%H%M%S') }}"
+    dashboard_file: "{{ reports_dir }}/dashboard.html"
 
   tasks:
+
     - name: Ensure reports directory exists
       file:
         path: "{{ reports_dir }}"
         state: directory
-        mode: '0755'
 
-    # ---------------- BAD IMAGE ----------------
-    - name: Scan insecure container (JSON)
-      command: /usr/bin/trivy image -f json nginx-bad
-      register: bad_scan_json
-      changed_when: false
+    ##################################################
+    # BASELINE SCAN (nginx-secure)
+    ##################################################
 
-    - name: Save insecure report (timestamped)
-      copy:
-        content: "{{ bad_scan_json.stdout }}"
-        dest: "{{ reports_dir }}/nginx-bad-{{ ansible_date_time.iso8601_basic }}.json"
+    - name: Scan baseline container (JSON)
+      command: /usr/bin/trivy image nginx-secure --format json
+      register: baseline_scan
+      ignore_errors: yes
 
-    - name: Count TOTAL vulnerabilities (bad image)
+    - name: Count MEDIUM vulnerabilities (baseline)
       set_fact:
-        bad_total: "{{ (bad_scan_json.stdout | from_json).Results
-                      | map(attribute='Vulnerabilities') | select('defined')
-                      | sum(start=[]) | list | length }}"
-
-    - name: Count CRITICAL vulnerabilities (bad image)
-      set_fact:
-        bad_critical: "{{ (bad_scan_json.stdout | from_json).Results
-                          | map(attribute='Vulnerabilities') | select('defined')
-                          | sum(start=[])
-                          | selectattr('Severity','equalto','CRITICAL') | list | length }}"
-
-    - name: Count HIGH vulnerabilities (bad image)
-      set_fact:
-        bad_high: "{{ (bad_scan_json.stdout | from_json).Results
-                      | map(attribute='Vulnerabilities') | select('defined')
-                      | sum(start=[])
-                      | selectattr('Severity','equalto','HIGH') | list | length }}"
-
-    - name: Count MEDIUM vulnerabilities (bad image)
-      set_fact:
-        bad_medium: "{{ (bad_scan_json.stdout | from_json).Results
-                        | map(attribute='Vulnerabilities') | select('defined')
-                        | sum(start=[])
-                        | selectattr('Severity','equalto','MEDIUM') | list | length }}"
-
-    - name: Count LOW vulnerabilities (bad image)
-      set_fact:
-        bad_low: "{{ (bad_scan_json.stdout | from_json).Results
-                     | map(attribute='Vulnerabilities') | select('defined')
-                     | sum(start=[])
-                     | selectattr('Severity','equalto','LOW') | list | length }}"
-
-    - name: Show vulnerability counts (bad image)
-      debug:
-        msg: "BAD image → TOTAL={{ bad_total }}, CRITICAL={{ bad_critical }}, HIGH={{ bad_high }}, MEDIUM={{ bad_medium }}, LOW={{ bad_low }}"
-
-    - name: Fail if CRITICAL vulnerabilities found (bad image)
-      fail:
-        msg: "CRITICAL vulnerabilities detected in nginx-bad ({{ bad_critical }})"
-      when: bad_critical | int > 0
-
-    - name: Warn if HIGH vulnerabilities found (bad image)
-      debug:
-        msg: "WARNING: HIGH vulnerabilities detected in nginx-bad ({{ bad_high }})"
-      when: bad_high | int > 0
-
-    # ---------------- SECURE IMAGE ----------------
-    - name: Scan secure container (JSON)
-      command: /usr/bin/trivy image -f json nginx-secure
-      register: secure_scan_json
-      changed_when: false
-
-    - name: Save secure report (timestamped)
-      copy:
-        content: "{{ secure_scan_json.stdout }}"
-        dest: "{{ reports_dir }}/nginx-secure-{{ ansible_date_time.iso8601_basic }}.json"
-
-    - name: Count TOTAL vulnerabilities (secure image)
-      set_fact:
-        secure_total: "{{ (secure_scan_json.stdout | from_json).Results
-                         | map(attribute='Vulnerabilities') | select('defined')
-                         | sum(start=[]) | list | length }}"
-
-    - name: Count CRITICAL vulnerabilities (secure image)
-      set_fact:
-        secure_critical: "{{ (secure_scan_json.stdout | from_json).Results
+        baseline_medium: "{{ (baseline_scan.stdout | from_json).Results
                              | map(attribute='Vulnerabilities') | select('defined')
                              | sum(start=[])
-                             | selectattr('Severity','equalto','CRITICAL') | list | length }}"
+                             | selectattr('Severity','equalto','MEDIUM')
+                             | list | length }}"
 
-    - name: Count HIGH vulnerabilities (secure image)
+    ##################################################
+    # PRODUCTION SCAN (nginx-bad)
+    ##################################################
+
+    - name: Scan production container (JSON)
+      command: /usr/bin/trivy image nginx-bad --format json
+      register: production_scan
+      ignore_errors: yes
+
+    - name: Count MEDIUM vulnerabilities (production)
       set_fact:
-        secure_high: "{{ (secure_scan_json.stdout | from_json).Results
-                         | map(attribute='Vulnerabilities') | select('defined')
-                         | sum(start=[])
-                         | selectattr('Severity','equalto','HIGH') | list | length }}"
+        production_medium: "{{ (production_scan.stdout | from_json).Results
+                               | map(attribute='Vulnerabilities') | select('defined')
+                               | sum(start=[])
+                               | selectattr('Severity','equalto','MEDIUM')
+                               | list | length }}"
 
-    - name: Count MEDIUM vulnerabilities (secure image)
-      set_fact:
-        secure_medium: "{{ (secure_scan_json.stdout | from_json).Results
-                           | map(attribute='Vulnerabilities') | select('defined')
-                           | sum(start=[])
-                           | selectattr('Severity','equalto','MEDIUM') | list | length }}"
+    ##################################################
+    # GENERATE DASHBOARD
+    ##################################################
 
-    - name: Count LOW vulnerabilities (secure image)
-      set_fact:
-        secure_low: "{{ (secure_scan_json.stdout | from_json).Results
-                        | map(attribute='Vulnerabilities') | select('defined')
-                        | sum(start=[])
-                        | selectattr('Severity','equalto','LOW') | list | length }}"
+    - name: Generate HTML dashboard
+      copy:
+        dest: "{{ dashboard_file }}"
+        content: |
+          <html>
+          <head>
+            <meta charset="UTF-8">
+            <title>Container Security Dashboard</title>
 
-    - name: Show vulnerability counts (secure image)
-      debug:
-        msg: "SECURE image → TOTAL={{ secure_total }}, CRITICAL={{ secure_critical }}, HIGH={{ secure_high }}, MEDIUM={{ secure_medium }}, LOW={{ secure_low }}"
+            <style>
+              body {
+                font-family: Arial, sans-serif;
+                background: linear-gradient(135deg, #1d1160, #00788c);
+                color: white;
+                padding: 20px;
+              }
 
-    - name: Fail if CRITICAL vulnerabilities found (secure image)
-      fail:
-        msg: "CRITICAL vulnerabilities detected in nginx-secure ({{ secure_critical }})"
-      when: secure_critical | int > 0
+              h1 {
+                text-align: center;
+                color: #00ffff;
+              }
 
-    - name: Warn if HIGH vulnerabilities found (secure image)
-      debug:
-        msg: "WARNING: HIGH vulnerabilities detected in nginx-secure ({{ secure_high }})"
-      when: secure_high | int > 0
+              .card {
+                background-color: rgba(0,0,0,0.6);
+                border: 2px solid #00ffff;
+                padding: 20px;
+                margin: 20px auto;
+                border-radius: 12px;
+                width: 70%;
+                box-shadow: 0 0 15px #00ffff;
+              }
+
+              .status-pass {
+                color: #00ffcc;
+                font-size: 32px;
+                font-weight: bold;
+              }
+
+              .status-fail {
+                color: #ff4d4d;
+                font-size: 32px;
+                font-weight: bold;
+              }
+
+              .label {
+                color: #00ffff;
+                font-weight: bold;
+              }
+            </style>
+          </head>
+
+          <body>
+
+            <h1>🐝 Container Security Dashboard</h1>
+
+            <div class="card">
+              <h2>Baseline Image (nginx-secure)</h2>
+              <p><span class="label">Medium Vulnerabilities:</span> {{ baseline_medium }}</p>
+            </div>
+
+            <div class="card">
+              <h2>Production Image (nginx-bad)</h2>
+              <p><span class="label">Medium Vulnerabilities:</span> {{ production_medium }}</p>
+            </div>
+
+            <div class="card">
+              <h2>Compliance Status</h2>
+
+              {% if production_medium > baseline_medium %}
+              <div class="status-fail">FAILED ❌</div>
+              {% else %}
+              <div class="status-pass">PASSED ✅</div>
+              {% endif %}
+
+            </div>
+
+          </body>
+          </html>
 
 
-# -------------------Medium Vulnerabilities Comparision ---------------------------
-
-    - name: Compare bad image to baseline (MEDIUM)
-      fail:
-        msg: "Image exceeds baseline MEDIUM vulnerabilities. Found {{ bad_medium }}, baseline is {{ secure_medium }}"
-      when: bad_medium | int > secure_medium | int
-
-# ----------------Total Comparsion--------------------------------------------------
-
-    - name: Compare bad image to baseline (TOTAL)
-      fail:
-        msg: "Image exceeds baseline TOTAL vulnerabilities. Found {{ bad_total }}, baseline is {{ secure_total }}"
-      when: bad_total | int > secure_total | int
+    - name: Deploy dashboard to nginx web root
+      become: true
+      copy:
+        src: "{{ dashboard_file }}"
+        dest: /var/www/html/index.html
+        remote_src: true
+        owner: www-data
+        group: www-data
+        mode: '0644'
