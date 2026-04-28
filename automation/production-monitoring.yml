@@ -1,0 +1,76 @@
+- name: Production Container Baseline Monitoring
+  hosts: all
+  gather_facts: true
+
+  vars:
+    reports_dir: /home/allensj/projects/security/container-stig-pipeline/reports
+    baseline_image: nginx-secure
+    production_image: nginx-bad
+
+  tasks:
+    - name: Ensure reports directory exists
+      file:
+        path: "{{ reports_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Scan approved baseline image
+      command: "/usr/bin/trivy image -f json {{ baseline_image }}"
+      register: baseline_scan
+      changed_when: false
+
+    - name: Scan production image
+      command: "/usr/bin/trivy image -f json {{ production_image }}"
+      register: production_scan
+      changed_when: false
+
+    - name: Save baseline scan report
+      copy:
+        content: "{{ baseline_scan.stdout }}"
+        dest: "{{ reports_dir }}/baseline-{{ baseline_image }}-{{ ansible_date_time.iso8601_basic }}.json"
+
+    - name: Save production scan report
+      copy:
+        content: "{{ production_scan.stdout }}"
+        dest: "{{ reports_dir }}/production-{{ production_image }}-{{ ansible_date_time.iso8601_basic }}.json"
+
+    - name: Count baseline vulnerabilities
+      set_fact:
+        baseline_total: "{{ (baseline_scan.stdout | from_json).Results | map(attribute='Vulnerabilities') | select('defined') | sum(start=[]) | list | length }}"
+        baseline_critical: "{{ (baseline_scan.stdout | from_json).Results | map(attribute='Vulnerabilities') | select('defined') | sum(start=[]) | selectattr('Severity','equalto','CRITICAL') | list | length }}"
+        baseline_high: "{{ (baseline_scan.stdout | from_json).Results | map(attribute='Vulnerabilities') | select('defined') | sum(start=[]) | selectattr('Severity','equalto','HIGH') | list | length }}"
+        baseline_medium: "{{ (baseline_scan.stdout | from_json).Results | map(attribute='Vulnerabilities') | select('defined') | sum(start=[]) | selectattr('Severity','equalto','MEDIUM') | list | length }}"
+        baseline_low: "{{ (baseline_scan.stdout | from_json).Results | map(attribute='Vulnerabilities') | select('defined') | sum(start=[]) | selectattr('Severity','equalto','LOW') | list | length }}"
+
+    - name: Count production vulnerabilities
+      set_fact:
+        production_total: "{{ (production_scan.stdout | from_json).Results | map(attribute='Vulnerabilities') | select('defined') | sum(start=[]) | list | length }}"
+        production_critical: "{{ (production_scan.stdout | from_json).Results | map(attribute='Vulnerabilities') | select('defined') | sum(start=[]) | selectattr('Severity','equalto','CRITICAL') | list | length }}"
+        production_high: "{{ (production_scan.stdout | from_json).Results | map(attribute='Vulnerabilities') | select('defined') | sum(start=[]) | selectattr('Severity','equalto','HIGH') | list | length }}"
+        production_medium: "{{ (production_scan.stdout | from_json).Results | map(attribute='Vulnerabilities') | select('defined') | sum(start=[]) | selectattr('Severity','equalto','MEDIUM') | list | length }}"
+        production_low: "{{ (production_scan.stdout | from_json).Results | map(attribute='Vulnerabilities') | select('defined') | sum(start=[]) | selectattr('Severity','equalto','LOW') | list | length }}"
+
+    - name: Show baseline vs production results
+      debug:
+        msg:
+          - "BASELINE {{ baseline_image }} → TOTAL={{ baseline_total }}, CRITICAL={{ baseline_critical }}, HIGH={{ baseline_high }}, MEDIUM={{ baseline_medium }}, LOW={{ baseline_low }}"
+          - "PRODUCTION {{ production_image }} → TOTAL={{ production_total }}, CRITICAL={{ production_critical }}, HIGH={{ production_high }}, MEDIUM={{ production_medium }}, LOW={{ production_low }}"
+
+    - name: Fail if production CRITICAL exceeds baseline
+      fail:
+        msg: "Production image exceeds baseline CRITICAL vulnerabilities. Production={{ production_critical }}, Baseline={{ baseline_critical }}"
+      when: production_critical | int > baseline_critical | int
+
+    - name: Fail if production HIGH exceeds baseline
+      fail:
+        msg: "Production image exceeds baseline HIGH vulnerabilities. Production={{ production_high }}, Baseline={{ baseline_high }}"
+      when: production_high | int > baseline_high | int
+
+    - name: Fail if production MEDIUM exceeds baseline
+      fail:
+        msg: "Production image exceeds baseline MEDIUM vulnerabilities. Production={{ production_medium }}, Baseline={{ baseline_medium }}"
+      when: production_medium | int > baseline_medium | int
+
+    - name: Pass baseline drift check
+      debug:
+        msg: "Production image is within approved baseline vulnerability profile."
