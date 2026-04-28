@@ -14,43 +14,29 @@
         path: "{{ reports_dir }}"
         state: directory
 
-    ##################################################
-    # BASELINE SCAN
-    ##################################################
-
     - name: Scan baseline image
       command: /usr/bin/trivy image nginx-secure --format json
       register: baseline_scan
       ignore_errors: yes
 
-    - name: Count baseline MEDIUM
+    - name: Count baseline vulnerabilities
       set_fact:
-        baseline_medium: "{{ (baseline_scan.stdout | from_json).Results
-          | map(attribute='Vulnerabilities') | select('defined')
-          | sum(start=[])
-          | selectattr('Severity','equalto','MEDIUM')
-          | list | length }}"
-
-    ##################################################
-    # PRODUCTION SCAN
-    ##################################################
+        baseline_critical: "{{ (baseline_scan.stdout | from_json).Results | map(attribute='Vulnerabilities') | select('defined') | sum(start=[]) | selectattr('Severity','equalto','CRITICAL') | list | length }}"
+        baseline_high: "{{ (baseline_scan.stdout | from_json).Results | map(attribute='Vulnerabilities') | select('defined') | sum(start=[]) | selectattr('Severity','equalto','HIGH') | list | length }}"
+        baseline_medium: "{{ (baseline_scan.stdout | from_json).Results | map(attribute='Vulnerabilities') | select('defined') | sum(start=[]) | selectattr('Severity','equalto','MEDIUM') | list | length }}"
+        baseline_low: "{{ (baseline_scan.stdout | from_json).Results | map(attribute='Vulnerabilities') | select('defined') | sum(start=[]) | selectattr('Severity','equalto','LOW') | list | length }}"
 
     - name: Scan production image
       command: /usr/bin/trivy image nginx-bad --format json
       register: production_scan
       ignore_errors: yes
 
-    - name: Count production MEDIUM
+    - name: Count production vulnerabilities
       set_fact:
-        production_medium: "{{ (production_scan.stdout | from_json).Results
-          | map(attribute='Vulnerabilities') | select('defined')
-          | sum(start=[])
-          | selectattr('Severity','equalto','MEDIUM')
-          | list | length }}"
-
-    ##################################################
-    # DASHBOARD
-    ##################################################
+        production_critical: "{{ (production_scan.stdout | from_json).Results | map(attribute='Vulnerabilities') | select('defined') | sum(start=[]) | selectattr('Severity','equalto','CRITICAL') | list | length }}"
+        production_high: "{{ (production_scan.stdout | from_json).Results | map(attribute='Vulnerabilities') | select('defined') | sum(start=[]) | selectattr('Severity','equalto','HIGH') | list | length }}"
+        production_medium: "{{ (production_scan.stdout | from_json).Results | map(attribute='Vulnerabilities') | select('defined') | sum(start=[]) | selectattr('Severity','equalto','MEDIUM') | list | length }}"
+        production_low: "{{ (production_scan.stdout | from_json).Results | map(attribute='Vulnerabilities') | select('defined') | sum(start=[]) | selectattr('Severity','equalto','LOW') | list | length }}"
 
     - name: Generate dashboard
       copy:
@@ -100,42 +86,64 @@
                 font-size: 30px;
                 font-weight: bold;
               }
+
+              .severity-critical {
+                color: #ff4d4d;
+                font-weight: bold;
+              }
+
+              .severity-high {
+                color: #ff9900;
+                font-weight: bold;
+              }
+
+              .severity-medium {
+                color: #ffd700;
+                font-weight: bold;
+              }
+
+              .severity-low {
+                color: #00ffcc;
+                font-weight: bold;
+              }
             </style>
           </head>
 
           <body>
 
-            <h1>🐝 Container Security Dashboard</h1>
+            <h1>Container Security Dashboard</h1>
             <p class="subtitle">Last Scan: {{ timestamp }}</p>
 
             <div class="card">
-              <h2>Baseline Image</h2>
-              <p>Medium: {{ baseline_medium }}</p>
+              <h2>Baseline Image: nginx-secure</h2>
+              <p class="severity-critical">CRITICAL: {{ baseline_critical }}</p>
+              <p class="severity-high">HIGH: {{ baseline_high }}</p>
+              <p class="severity-medium">MEDIUM: {{ baseline_medium }}</p>
+              <p class="severity-low">LOW: {{ baseline_low }}</p>
             </div>
 
             <div class="card">
-              <h2>Production Image</h2>
-              <p>Medium: {{ production_medium }}</p>
+              <h2>Production Image: nginx-bad</h2>
+              <p class="severity-critical">CRITICAL: {{ production_critical }}</p>
+              <p class="severity-high">HIGH: {{ production_high }}</p>
+              <p class="severity-medium">MEDIUM: {{ production_medium }}</p>
+              <p class="severity-low">LOW: {{ production_low }}</p>
             </div>
 
             <div class="card">
               <h2>Compliance Status</h2>
 
-              {% if production_medium > baseline_medium %}
-              <div class="status-fail">FAILED ❌</div>
+              {% if production_critical > baseline_critical or production_high > baseline_high or production_medium > baseline_medium or production_low > baseline_low %}
+              <div class="status-fail">FAILED</div>
               {% else %}
-              <div class="status-pass">PASSED ✅</div>
+              <div class="status-pass">PASSED</div>
               {% endif %}
 
-              <p>Policy: Production must not exceed baseline vulnerabilities.</p>
+              <p>Policy: Production image must not exceed baseline vulnerabilities.</p>
             </div>
 
           </body>
           </html>
-
-    ##################################################
-    # DEPLOY TO NGINX
-    ##################################################
 
     - name: Deploy dashboard to nginx
       become: true
