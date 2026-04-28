@@ -1,11 +1,11 @@
-- name: Container STIG Pipeline Scan (Dashboard Enabled)
+- name: Container STIG Pipeline (Full Pipeline)
   hosts: all
   gather_facts: false
 
   vars:
     reports_dir: "/home/allensj/projects/security/container-stig-pipeline/reports"
-    timestamp: "{{ lookup('pipe', 'date +%Y%m%d-%H%M%S') }}"
     dashboard_file: "{{ reports_dir }}/dashboard.html"
+    timestamp: "{{ lookup('pipe', 'date') }}"
 
   tasks:
 
@@ -15,139 +15,131 @@
         state: directory
 
     ##################################################
-    # BASELINE SCAN (nginx-secure)
+    # BASELINE SCAN
     ##################################################
 
-    - name: Scan baseline container (JSON)
+    - name: Scan baseline image
       command: /usr/bin/trivy image nginx-secure --format json
       register: baseline_scan
       ignore_errors: yes
 
-    - name: Count MEDIUM vulnerabilities (baseline)
+    - name: Count baseline MEDIUM
       set_fact:
         baseline_medium: "{{ (baseline_scan.stdout | from_json).Results
-                             | map(attribute='Vulnerabilities') | select('defined')
-                             | sum(start=[])
-                             | selectattr('Severity','equalto','MEDIUM')
-                             | list | length }}"
+          | map(attribute='Vulnerabilities') | select('defined')
+          | sum(start=[])
+          | selectattr('Severity','equalto','MEDIUM')
+          | list | length }}"
 
     ##################################################
-    # PRODUCTION SCAN (nginx-bad)
+    # PRODUCTION SCAN
     ##################################################
 
-    - name: Scan production container (JSON)
+    - name: Scan production image
       command: /usr/bin/trivy image nginx-bad --format json
       register: production_scan
       ignore_errors: yes
 
-    - name: Count MEDIUM vulnerabilities (production)
+    - name: Count production MEDIUM
       set_fact:
         production_medium: "{{ (production_scan.stdout | from_json).Results
-                               | map(attribute='Vulnerabilities') | select('defined')
-                               | sum(start=[])
-                               | selectattr('Severity','equalto','MEDIUM')
-                               | list | length }}"
+          | map(attribute='Vulnerabilities') | select('defined')
+          | sum(start=[])
+          | selectattr('Severity','equalto','MEDIUM')
+          | list | length }}"
 
     ##################################################
-    # GENERATE DASHBOARD
+    # DASHBOARD
     ##################################################
 
-    - name: Generate HTML dashboard
+    - name: Generate dashboard
       copy:
         dest: "{{ dashboard_file }}"
         content: |
-                <html>
-      <head>
-        <meta charset="UTF-8">
-        <title>Container Security Dashboard</title>
+          <html>
+          <head>
+            <meta charset="UTF-8">
+            <title>Container Security Dashboard</title>
+            <style>
+              body {
+                font-family: Arial, sans-serif;
+                background: linear-gradient(135deg, #1d1160, #00788c);
+                color: white;
+                padding: 20px;
+              }
 
-        <style>
-          body {
-            font-family: Arial, sans-serif;
-            background: linear-gradient(135deg, #1d1160, #00788c);
-            color: white;
-            padding: 20px;
-          }
+              h1 {
+                text-align: center;
+                color: #00ffff;
+              }
 
-          h1 {
-            text-align: center;
-            color: #00ffff;
-          }
+              .subtitle {
+                text-align: center;
+                color: #d7f7ff;
+                margin-bottom: 20px;
+              }
 
-          .subtitle {
-            text-align: center;
-            color: #d7f7ff;
-            font-size: 14px;
-            margin-bottom: 30px;
-          }
+              .card {
+                background-color: rgba(0,0,0,0.6);
+                border: 2px solid #00ffff;
+                padding: 20px;
+                margin: 20px auto;
+                border-radius: 12px;
+                width: 70%;
+                box-shadow: 0 0 15px #00ffff;
+              }
 
-          .card {
-            background-color: rgba(0,0,0,0.6);
-            border: 2px solid #00ffff;
-            padding: 20px;
-            margin: 20px auto;
-            border-radius: 12px;
-            width: 70%;
-            box-shadow: 0 0 15px #00ffff;
-          }
+              .status-fail {
+                color: #ff4d4d;
+                font-size: 30px;
+                font-weight: bold;
+              }
 
-          .status-pass {
-            color: #00ffcc;
-            font-size: 32px;
-            font-weight: bold;
-          }
+              .status-pass {
+                color: #00ffcc;
+                font-size: 30px;
+                font-weight: bold;
+              }
+            </style>
+          </head>
 
-          .status-fail {
-            color: #ff4d4d;
-            font-size: 32px;
-            font-weight: bold;
-          }
+          <body>
 
-          .label {
-            color: #00ffff;
-            font-weight: bold;
-          }
-        </style>
-      </head>
+            <h1>🐝 Container Security Dashboard</h1>
+            <p class="subtitle">Last Scan: {{ timestamp }}</p>
 
-      <body>
+            <div class="card">
+              <h2>Baseline Image</h2>
+              <p>Medium: {{ baseline_medium }}</p>
+            </div>
 
-        <h1>🐝 Container Security Dashboard</h1>
-        <p class="subtitle">Last Scan: {{ timestamp }}</p>
+            <div class="card">
+              <h2>Production Image</h2>
+              <p>Medium: {{ production_medium }}</p>
+            </div>
 
-        <div class="card">
-          <h2>Baseline Image (nginx-secure)</h2>
-          <p><span class="label">Medium Vulnerabilities:</span> {{ baseline_medium }}</p>
-        </div>
+            <div class="card">
+              <h2>Compliance Status</h2>
 
-        <div class="card">
-          <h2>Production Image (nginx-bad)</h2>
-          <p><span class="label">Medium Vulnerabilities:</span> {{ production_medium }}</p>
-        </div>
+              {% if production_medium > baseline_medium %}
+              <div class="status-fail">FAILED ❌</div>
+              {% else %}
+              <div class="status-pass">PASSED ✅</div>
+              {% endif %}
 
-        <div class="card">
-          <h2>Compliance Status</h2>
+              <p>Policy: Production must not exceed baseline vulnerabilities.</p>
+            </div>
 
-          {% if production_medium > baseline_medium %}
-          <div class="status-fail">FAILED ❌</div>
-          {% else %}
-          <div class="status-pass">PASSED ✅</div>
-          {% endif %}
+          </body>
+          </html>
 
-          <p class="label">
-            Policy: Production image fails when vulnerabilities exceed baseline.
-          </p>
-        </div>
+    ##################################################
+    # DEPLOY TO NGINX
+    ##################################################
 
-      </body>
-      </html>
-
-    - name: Deploy dashboard to nginx web root
+    - name: Deploy dashboard to nginx
       become: true
       copy:
         src: "{{ dashboard_file }}"
         dest: /var/www/html/index.html
         remote_src: true
-        owner: www-data
-        group: www-data
-        mode: '0644'
