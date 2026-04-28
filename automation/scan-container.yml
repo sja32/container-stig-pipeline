@@ -133,14 +133,14 @@
 
 # -------------------Medium Vulnerabilities Comparision ---------------------------
 
-   - name: Compare bad image to baseline (MEDIUM)
-     fail:
-       msg: "Image exceeds baseline MEDIUM vulnerabilities. Found {{ bad_medium }}, baseline is {{ secure_medium }}"
-     when: bad_medium | int > secure_medium | int
+    - name: Compare bad image to baseline (MEDIUM)
+      fail:
+        msg: "Image exceeds baseline MEDIUM vulnerabilities. Found {{ bad_medium }}, baseline is {{ secure_medium }}"
+      when: bad_medium | int > secure_medium | int
 
 # ----------------Total Comparsion--------------------------------------------------
 
-   - name: Compare bad image to baseline (TOTAL)
-     fail:
-       msg: "Image exceeds baseline TOTAL vulnerabilities. Found {{ bad_total }}, baseline is {{ secure_total }}"
-     when: bad_total | int > secure_total | int
+    - name: Compare bad image to baseline (TOTAL)
+      fail:
+        msg: "Image exceeds baseline TOTAL vulnerabilities. Found {{ bad_total }}, baseline is {{ secure_total }}"
+      when: bad_total | int > secure_total | int
