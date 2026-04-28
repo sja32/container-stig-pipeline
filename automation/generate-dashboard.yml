@@ -1,0 +1,93 @@
+- name: Generate Security Dashboard
+  hosts: all
+  gather_facts: true
+
+  vars:
+    reports_dir: /home/allensj/projects/security/container-stig-pipeline/reports
+    dashboard_file: "{{ reports_dir }}/dashboard.html"
+
+  tasks:
+    - name: Find latest baseline report
+      shell: "ls -t {{ reports_dir }}/baseline-nginx-secure-*.json | head -1"
+      register: baseline_file
+
+    - name: Find latest production report
+      shell: "ls -t {{ reports_dir }}/production-nginx-bad-*.json | head -1"
+      register: production_file
+
+    - name: Load baseline JSON
+      slurp:
+        src: "{{ baseline_file.stdout }}"
+      register: baseline_content
+
+    - name: Load production JSON
+      slurp:
+        src: "{{ production_file.stdout }}"
+      register: production_content
+
+    - name: Parse baseline vulnerabilities
+      set_fact:
+        baseline_data: "{{ baseline_content.content | b64decode | from_json }}"
+
+    - name: Parse production vulnerabilities
+      set_fact:
+        production_data: "{{ production_content.content | b64decode | from_json }}"
+
+    - name: Count baseline MEDIUM
+      set_fact:
+        baseline_medium: "{{ baseline_data.Results | map(attribute='Vulnerabilities') | select('defined') | sum(start=[]) | selectattr('Severity','equalto','MEDIUM') | list | length }}"
+
+    - name: Count production MEDIUM
+      set_fact:
+        production_medium: "{{ production_data.Results | map(attribute='Vulnerabilities') | select('defined') | sum(start=[]) | selectattr('Severity','equalto','MEDIUM') | list | length }}"
+
+    - name: Determine status
+      set_fact:
+        compliance_status: >-
+          {% if production_medium > baseline_medium %}
+          FAILED ❌
+          {% else %}
+          PASSED ✅
+          {% endif %}
+
+    - name: Generate HTML dashboard
+      copy:
+        dest: "{{ dashboard_file }}"
+        content: |
+          <html>
+          <head>
+            <title>Container Security Dashboard</title>
+            <style>
+              body { font-family: Arial; background-color: #111; color: #eee; }
+              .card { border: 1px solid #444; padding: 20px; margin: 20px; border-radius: 10px; }
+              .fail { color: red; }
+              .pass { color: lightgreen; }
+            </style>
+          </head>
+          <body>
+
+            <h1>🔥 Container Security Dashboard</h1>
+
+            <div class="card">
+              <h2>Baseline Image (nginx-secure)</h2>
+              <p>Medium Vulnerabilities: {{ baseline_medium }}</p>
+            </div>
+
+            <div class="card">
+              <h2>Production Image (nginx-bad)</h2>
+              <p>Medium Vulnerabilities: {{ production_medium }}</p>
+            </div>
+
+            <div class="card">
+              <h2>Compliance Status</h2>
+              <h1 class="{{ 'fail' if production_medium > baseline_medium else 'pass' }}">
+                {{ compliance_status }}
+              </h1>
+            </div>
+
+          </body>
+          </html>
+
+    - name: Show dashboard location
+      debug:
+        msg: "Dashboard created at {{ dashboard_file }}"
